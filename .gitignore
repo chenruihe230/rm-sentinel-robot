@@ -1,0 +1,22 @@
+# Keil / compiler outputs
+breathing/MDK-ARM/breathing/
+*.o
+*.d
+*.crf
+*.axf
+*.hex
+*.map
+*.lst
+*.dep
+*.lnp
+*.build_log.htm
+*.uvguix.*
+*.scvd
+
+# Local editor / OS files
+.vscode/
+.vs/
+*.swp
+*.tmp
+.DS_Store
+Thumbs.db

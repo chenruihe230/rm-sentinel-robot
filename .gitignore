@@ -20,3 +20,8 @@ breathing/MDK-ARM/breathing/
 *.tmp
 .DS_Store
 Thumbs.db
+
+breathing/build/
+
+*.log
+

@@ -36,7 +36,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-/* 电机控制参数已移到 control.c（中断里跑）。这里只留 OLED 显示相关。 */
+/* 电机控制参数已移�? control.c（中断里跑）。这里只�? OLED 显示相关�? */
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -96,8 +96,9 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM4_Init();
   MX_TIM5_Init();
+  MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
-  /* 电机控制由 SysTick 中断里的 Control_Update() 驱动，这里只做初始化。 */
+  /* 电机控制�? SysTick 中断里的 Control_Update() 驱动，这里只做初始化�? */
   Control_Init();
 
   /* OLED is optional for motor bring-up; do not block motor startup. */
@@ -115,7 +116,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
     uint32_t currentTick = HAL_GetTick();
 
-    /* 电机控制已在 SysTick 中断里跑，主循环只负责刷 OLED。 */
+    /* 电机控制已在 SysTick 中断里跑，主循环只负责刷 OLED�? */
     if ((currentTick - motorDisplayTick) >= 100U)
     {
       motorDisplayTick = currentTick;
@@ -131,12 +132,12 @@ int main(void)
 
         if (Control_IsTestMode())
         {
-          /* 编码器测试模式：显示每路累计计数。 */
+          /* 编码器测试模式：显示每路累计计数�? */
           OLED_ShowSignedNum(20, y, Control_GetTotalCount(i), 8, OLED_SIZE_8);
         }
         else
         {
-          /* 驱动模式：显示 100 ms 窗口 RPM（1 位小数、带符号）与输出占空比（%）。 */
+          /* 驱动模式：显�? 100 ms 窗口 RPM�?1 位小数�?�带符号）与输出占空比（%）�?? */
           OLED_ShowFloat(18, y, Control_GetSpeedRpm(i), 4, 1, OLED_SIZE_8);
           OLED_ShowString(62, y, "RPM", OLED_SIZE_8, OLED_MODE_NORMAL);
           OLED_ShowSignedNum(84, y, Control_GetOutputPercent(i), 4, OLED_SIZE_8);

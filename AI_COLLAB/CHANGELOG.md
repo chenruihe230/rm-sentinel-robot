@@ -5,6 +5,16 @@
 > 说明：以后每次改动都追加一条到这里（日期 + 改了什么 + 涉及文件 + 是否需要动 CubeMX）。
 > 注意：从 CubeMX 重新生成代码会重写 `MDK-ARM/breathing.uvprojx`，手动加进工程的 .c 文件（pid.c、control.c 等）会被冲掉，需在 Keil 里重新 Add。
 
+## 2026-11-21 16:25 [阶段 2 正式收官 — S2-TEST 验收记录]
+
+- **产出** `AI_COLLAB/ACCEPTANCE/STAGE_02.md`：对照 `PLAN_STAGE_02.md` §五逐项验收，结论 **阶段 2 通过、同意收官**。
+- **达标项**：运动学（直行同向/旋转反向/停车归零）、里程计（直行 2 m 纵向 0.1%、横偏 ≤5 cm、90°/180° 定点误差 −0.7°）、IMU（静止 YAW 稳定、CCW 为正、旋转真值一致）、安全（掉线 SAFE STOP、±250 饱和、1 ms 无阻塞）。
+- **4 项非阻塞未测如实记录**：弧线旋转内外侧速度差、单轮 1 m 独立误差、360°/闭环回起点、编码器/融合模式切换对比 —— 均有代证或非核心，建议阶段 3 补测。
+- **5 条工程结论沉淀**：等效轮距 0.3703（几何 0.20 的 1.85 倍）、闭环下 motorGain 保持 1.0、wheelScale 只修里程不修轨迹、定点转向需低速保底+过冲刹车、I2C 看总线时序不只看地址。
+- **移交 Codex**：更新总览、定通信归属（原 S2-06 已移出阶段 2、归属未定）、阶段 3 规划。
+- README 加验收记录入口；AI_SYNC §2 转阶段 2 收官、§5 S2-TEST 完成。
+- CubeMX：否（文档）。
+
 ## 2026-11-08
 
 ### 修复 M4 后退不转
@@ -213,6 +223,144 @@
 - **重要发现（需裁决）**：本款电机满占空比极速约 **300~340 RPM**，`TASK_STAGE_01_PID.md` 的 **400 RPM 测试点超出硬件上限**。建议阶段 1 验收上限按 **200 RPM** 核定；任务单修订由 Codex 接 MiMo 在阶段末处理，本收口不改任务单。
 - **遗留**：① 尚未做落地 200 RPM 长时间直行对比；② 外部上位机下发指令测试留待阶段 2 联调；③ 400 RPM 测试点裁决。
 - **下一步**：阶段 1 验收评审 → 移交阶段 2（底盘运动学与整车里程计）。总览与版本规划交 Codex 接 MiMo。
+- CubeMX：否。
+
+## 2026-11-21 15:04 [派单 S2-04 v2 — IMU 接入与 yaw 融合 收口]
+
+### 阶段 2 第四单完成（IMU 硬件接入 + 防死锁驱动 + IMU 为主融合）
+
+- **改动范围**：新建 `Core/Inc/imu.h`、`Core/Src/imu.c`；追加 `Core/Inc/chassis.h`（`#include "imu.h"` + `chassisYawFusionMode`）；修改 `Core/Src/chassis.c`（桩函数改真实 + 10 ms 分频读 + IMU 为主融合 + 复位零点）；`uvprojx` 加入 `imu.c`。禁止文件时间戳全未变（`main.c/.h`、`control.c/.h`、`encoder.c/.h`、`pid.c/.h`、`i2c.c`、`oled.c`、`.ioc`）。
+- **防死锁实现（WorkBuddy 逐项核对）**：`imu.c` **无任何 `HAL_I2C_*` 调用**，全部 `I2C2->SR1/SR2/CR1/DR` 裸寄存器轮询；**DWT->CYCCNT 2 ms 硬超时**（`IMU_GetTimeoutCycles` 按 `SystemCoreClock` 算，168 MHz 下 336000 cycles）+ `IMU_MAX_POLL_LOOPS=350000` 双层兜底；NACK/ARLO/BERR 立即清标志发 STOP；`IMU_BusRecover()` 软复位 + `MX_I2C2_Init()` 重配 + `imuAvailable=0`。SysTick 不会被卡死。
+- **10 ms 分频**：在 `chassis.c` 的 `Chassis_Update()` 内（`imuPollDivider >= CHASSIS_IMU_POLL_DIV`），**control.c 未改**。
+- **配置序列**：`IMU_Init()`（由 `Chassis_Init()` 调用）→ DWT 使能 → KEY(0x69)=0xB588 解锁 → AXIS6(0x24)=1 → RRATE(0x03)=0x09 → RSW(0x02)=0x0C；**无 0x53 写**；IMU 后上线自动补配。
+- **14 字节连读**：从 GZ(0x39) 连读 14 字节，`raw_gz=buf[1]<<8|buf[0]`、`raw_yaw=buf[13]<<8|buf[12]`（低字节在前）；`IMU_GetYawRate()` 换算 `raw/32768*2000*pi/180`，含 `imuYawSign`；yaw 相对角 `wrap(sign*wrap(raw−yaw0)+offset)`。
+- **融合策略**：IMU 可用 → `chassisYaw=IMU_GetYaw()`，位置用 IMU 中点角投影；不可用 → 自动回退 S2-03 纯编码器；IMU 恢复时重新对齐基准角。IMU yaw/yaw_rate **未喂速度 PID**。
+- **编译**：11-21 **14:56:15** Keil Build（ARMCC V5.06u7），**0 Error / 0 Warning**（Code=14960 / RO=2664 / RW=388 / ZI=3460），`breathing.hex` 49903 bytes。
+- **实车状态**：① **未接 IMU 上电防死锁实测 —— 待人类烧录 14:56 版 hex 确认**（派单必测项，代码层已防护但实测未回传）；② 接 IMU 旋转 90°/180° 对比留 S2-TEST（模块待到货/接线）。
+- **遗留**：未接 IMU 防死锁实测未回传；IMU 实车旋转对比未做；等效轮距与左右差异待 S2-05。
+- **下一步**：S2-05 等效轮距（S2-03 实测约 0.40 m）与左右轮增益标定；S2-06 UART 通信。
+- CubeMX：否（W0 已于 14:39 完成）。
+
+## 2026-11-21 16:21 [派单 S2-06B — 定点转向精度微调 收口]
+
+### 定点转向误差从 ~2° 压到 ~0.7°（优于 ≤1° 目标）
+
+- **改动范围**：仅 `Core/Inc/chassis.h`、`Core/Src/chassis.c`。禁止文件时间戳全未变；`main.c` 临时测试后字节级还原（7049 bytes、无 `O:1/T:0` 残留）。
+- **最终参数**（全局可写，非 const）：`CHASSIS_HEADING_TOL_RAD` 0.05→**0.008f**（约 0.46°）、`SETTLE_MS` 200→**150U**、`CHASSIS_HEADING_LOW_BAND_RAD=0.10f`、`CHASSIS_HEADING_OVERSHOOT_RAD=0.05f`、`chassisHeadingMinOmega=0.06f`（可写）、`chassisHeadingTimeoutMs=8000U`（可写）、`chassisHeadingTimedOut`（只读）。
+- **控制率（WorkBuddy 核对）**：`Chassis_ComputeHeadingOmega(yaw_ref, is_point_turn, err_out)` 加模式隔离 —— **mode 1 传 `is_point_turn=0U` 仍纯比例**（第 471 行，避免直行画龙）；**mode 2** 四级：容差带内 `w=0` 刹车等待 150ms → 过冲符号翻转且 `|err|<0.05` 用 minOmega 主动反向 → 低速段 `max(Kp*|err|, minOmega)` 克服静摩擦 → 高速段纯比例，均限幅 ±max_w；`min_w>max_w` 有钳位保护。
+- **保护未动**：mode 2 掉线 `IMU_IsAvailable()==0U` 立即停车（第 481 行）原样；超时 8000ms 置 `chassisHeadingReached=1`/`chassisHeadingTimedOut=1` 并停车回报余差（第 524-527 行）。
+- **编译**：11-21 **16:20:31** Keil Build，**0 Error / 0 Warning**（Code=15752 / RO=2664 / RW=444 / ZI=3460），`breathing.hex` 52182 bytes，上电 mode 0 + `TARGET=0`。
+- **实车（人类）**：
+  - `TOL=0.017f` 时：+90°→**89.3°**、+180°→**179.3°**（误差均 −0.7°，`O:1 T:0`，无超调无振荡）；
+  - 人类要求进一步提高 → `TOL=0.008f` 复测，平稳停准（最终取值）；
+  - **定点误差约 0.7°，优于派单目标 ≤1°**。
+- **回归**：mode 1 纯比例支路与 mode 2 掉线保护代码未改（S2-06 已实测直行横偏 <5cm、断 IMU SAFE STOP）；完整联动回归留 S2-TEST。
+- **遗留**：无。**阶段 2 全部实现完成，下一步 S2-TEST 统一验收 → 阶段 2 收官。**
+- CubeMX：否。
+
+## 2026-11-21 16:08 [派单 S2-06 — 航向闭环纠偏 收口]
+
+> 编号说明：本 S2-06 = 航向闭环（11-21 新增），与原 S2-06 基础通信（15:41 移出阶段 2）无关。
+
+### 阶段 2 最后一个实现单完成（IMU 航向闭环，直行保持 + 定点转向）
+
+- **改动范围**：仅 `Core/Inc/chassis.h`、`Core/Src/chassis.c`。禁止文件时间戳全未变（`control.c/.h`、`encoder.c/.h`、`pid.c/.h`、`imu.c/.h`、`i2c.c`、`.ioc`）；`main.c` 临时测试后字节级还原（7049 bytes 与基线一致，无 `MODE/SAFE STOP` 残留）。
+- **W0 固化（保持 Watch 可写，非 const）**：`chassisTrackWidthM` 0.20→**0.3703f**（`CHASSIS_DEFAULT_TRACK_M`）、`wheelScale[]` 1.0→**1.015f**（`CHASSIS_DEFAULT_WHEEL_SCALE`）、`motorGain[]` 保持全 **1.0f**（不写开环 1.076）。
+- **航向环实现（WorkBuddy 核对）**：`Chassis_ComputeHeadingOmega()` 在**差速解算之前**覆盖 omega（第 385-442 行 vs 452 行）；`err=wrap(yaw_ref−IMU_GetYaw())`、`omega=clamp(Kp*err, ±maxOmega)`，Kp 默认 1.0、maxOmega 1.0 rad/s；mode 0 原行为、mode 1 锁存基准保持、mode 2 定点转向。**速度 PID 反馈仍只读 `motorSpeedFiltered[]`，IMU yaw 未喂 PID**。1 ms 中断无阻塞。
+- **安全**：mode 2 下 `imuAvailable==0` 立即清零 vx/omega/target 停车、绝不盲转（398-406 行）；到达判据 `|err|≤0.05 rad(2.86°)` 持续 200 ms → 锁死停车、`chassisHeadingReached=1`。
+- **编译**：11-21 **16:07:32** Keil Build，**0 Error / 0 Warning**（Code=15444 / RO=2664 / RW=424 / ZI=3456），`breathing.hex` 51290 bytes，上电 mode 0 + `TARGET=0`。
+- **实车全项（人类确认）**：
+  - **测试 A 航向保持直行 2 m**：横偏由 S2-05 右偏 ~10 cm 收敛到**左偏 ≤5 cm**（满足判据）；里程计 X=2.002 m vs 实走 2.00 m（**0.1%**），Y=−0.012 m、YAW=−0.3°。
+  - **测试 B 定点转向**：+90° 实停 **88.0°**（−2.0°）、+180° 实停 **177.7°**（−2.3°），均 ≤5°、零超调（停在目标前约 2° 系 2.86° 容差触发 200 ms 锁死，符合预期）。
+  - **测试 C IMU 掉线**：mode 2 下发 +90° 时断开 IMU → OLED `IMU:NO`/`MODE:2`/`SAFE STOP!`、四轮 0.0 RPM、车静止，不死锁不盲转。
+- **遗留**：mode 2 到达容差 0.05 rad 会稳定停在目标前约 2°；若 S2-TEST 要求压到 1° 内再微调容差/Kp（非功能缺陷）。
+- **结论**：S2-06 设计目标与实车判据一次性全通过。**阶段 2 最后一个实现单完成，下一步 S2-TEST 统一验收。**
+- CubeMX：否。
+
+## 2026-11-21 15:46 [派单 S2-05 — 实车标定 收口]
+
+### 阶段 2 第五单完成（等效轮距 / motorGain / wheelScale 实测标定）
+
+- **改动范围**：仅 `chassis.h` 追加只读观测 `chassisOdomDistLeft/Right` 声明，`chassis.c` 在 `Chassis_UpdateOdometry()` 累加、`Chassis_ResetOdometry()` 清零；`Chassis_Init()` 默认值仍 `0.20f` / gain、scale 全 `1.0f`（**未写死标定值**），`WHEEL_DIAMETER_M` 只读。禁止文件时间戳全未变；`main.c` 临时 OLED 测试后字节级还原（7049 bytes 与 S2-04 版一致、无残留）。
+- **编译**：11-21 **15:39:54** Keil Build，**0 Error / 0 Warning**（Code=15000 / RO=2664 / RW=396 / ZI=3460），`breathing.hex` 50022 bytes，上电 `TARGET=0`。
+- **等效轮距（3 次原地旋转，IMU 真值 + 累计距离差）**：T1=0.364 / T2=0.376 / T3=0.370 m，**均值 0.3703 m，极差 3.24%**（≤5% 判据）。与 S2-03「0.20 m 发 90° 实转 ~48°」自洽（0.20/0.3703×90≈48.6°）。**建议值 0.3703f**（未固化，待人类决定）。
+- **motorGain（20/40/60/80% 开环 + 闭环 100 RPM 验证）**：四轮开环增益 M1=3.234 / M2=3.167 / M3=3.216 / M4=2.910 RPM/%（M4 偏慢约 8%）；**闭环在 `motorGain=1.0` 下四轮稳态 99.5~100.2 RPM（±0.5%），远优于 ±4%**。
+  - **⚠️ 重要工程结论**：**闭环模式下 `motorGain[]` 维持全 1.0f**。若把开环比值 0.968/1.076 写入，会强迫 M4 闭环比 M1 快 11% 导致左偏 —— 速度 PI 已闭环拉齐，开环前馈不可用。除非日后改为前馈加到 PWM 占空比，否则不启用开环补偿值。
+- **wheelScale（2 m 地砖直行）**：里程计 X=1.971 m / Y=−0.008 m；实走 2.00 m，纵向误差 **1.45%**（≤3%）；左右累计差仅 2 mm。建议 `wheelScale[]={1.015}×4`（未固化，不改写轮径）。
+- **遗留**：无航向闭环下 2 m 自由直行右偏约 10 cm（~2.86°），源自起点 2~3° 初角误差 / 微打滑 / 轮径公差；`wheelScale` 只修里程读数不改轨迹，人类确认**不靠静态硬调差速掩盖**。→ 需航向闭环根治（新需求，见下）。
+- **编号纠偏（WorkBuddy）**：实现方回传中反复写「进入 S2-06（IMU 航向闭环纠偏）」，但 **S2-06（基础通信）已于 15:41 移出阶段 2**，且「IMU 航向闭环」从未定为 S2-06。本记录不沿用该错误编号，记为**遗留待规划项**。
+- **下一步**：S2-TEST 统一验收；待固化的 `chassisTrackWidthM=0.3703f`、`wheelScale=1.015f` 由人类决定；航向闭环（直行纠偏 / 定点精确转向）为新增需求，留待阶段末规划，不自增派单。
+- CubeMX：否。
+
+## 2026-11-21 15:41 [文档调整 — 基础通信移出阶段 2]
+
+- **人类裁定**：基础电脑通信（原 S2-06）**肯定不是阶段 2 任务**，但暂不指定归属阶段（「先不想放哪个阶段」）。
+- **改动**：从 `PLAN_STAGE_02.md`（阶段目标、任务拆分表、S2-06 章节、验收标准、细则 5、阶段 3 预留、最终交付清单）、`AI_SYNC.md`（§5 待办、§7 第 13 条并新增第 20 条、广播）、三张已出派单的「下一位提示」、`BRIEF_FOR_CODEX.md` 中移除 S2-06；规划里以删除线 + 说明形式存档原内容，参考口径保留。
+- **阶段 2 现为**：S2-01 接口 → S2-02 运动学 → S2-03 里程计 → S2-04 IMU → S2-05 标定 → **S2-TEST 统一验收**（前五单全部完成或已出派单）。
+- **通信归属留空**：待阶段末由 Codex 规划，不预设是阶段 3；基础/完整通信与 200 ms 超时的参考口径存档在 `PLAN_STAGE_02.md` §七细则 5。
+- 未改任何源码/`.ioc`/hex。
+
+## 2026-11-21 15:17 [派单 S2-04 最终版确认 — 上电收敛 + 实车通过]
+
+> 相对 15:04 收口版的增量（同一单，非新单）
+
+- **新增 1000 ms 启动零点收敛**：模块手册启动时间 1000 ms，`imu.c` 加 `imuWarmupCount=100`，上电前 100 次 10 ms 采样持续跟随 `imuYaw0`，滤波收敛后锁存（第 390-394 行）。解决上电初期 yaw 跳变。
+- **临时测试还原**：人类现场临时改 `main.c` 用 OLED 观测 `IMU:OK/Gz/YAW`，测后已**完整还原** —— WorkBuddy 核对 `main.c` 大小 7049 bytes 与 14:39 CubeMX 生成版一致，全文无 IMU 测试残留。
+- **编译**：11-21 最终 hex **文件系统时间 15:17:01**（实现方报告 15:15:01，同类小偏差按文件系统记），**0 Error / 0 Warning**（Code=14968 / RO=2664 / RW=388 / ZI=3460），49932 bytes。
+- **实车验证（人类确认，接 IMU）**：
+  - 接线：3V3→3.3V、GND→GND、SCL→PB10、SDA→PB11（与 OLED I2C1 PB6/PB7 隔离）；
+  - 通信正常 OLED 显示 `IMU:OK`；静止 `Gz≈0`；加 1000 ms 收敛后上电 1 秒 `YAW` 稳定 0.0° 附近；
+  - **方向标定验证：原地逆时针（左转）90° → YAW 读数 +90°，确认 `imuYawSign=+1.0f`（CCW 为正）正确** —— 与坐标系约定一致，且对比 S2-03 纯编码器同动作仅 45°，坐实编码器打滑误差；
+  - 融合默认 `chassisYawFusionMode=1`（IMU 为主），`imuAvailable=0` 或手动置 0 时无感回退纯编码器。
+- **S2-04 结论**：代码层 + 实车双双通过，**正式完成**。遗留「未接 IMU 上电防死锁实测」仍待人类单独确认（接 IMU 实车正常已间接验证驱动无死锁，但异常场景未单测），列 §5 待办 2-S2-04b，不阻塞 S2-05。
+- **下一步**：S2-05 等效轮距（S2-03 实测约 0.40 m）与左右轮增益/里程 scale 标定 —— 现在有 IMU 真值航向角可用作标定基准。
+
+## 2026-11-21 14:21 [派单 S2-03 — 整车里程计积分 收口]
+
+### 阶段 2 第三单完成（纯编码器里程计 + 发现 skid-steer 打滑）
+
+- **改动范围**：仅 `Core/Inc/chassis.h`、`Core/Src/chassis.c`（源码时间戳 11-20 21:17/21:18）。`main.c` / `control.c` 为临时实测后**已彻底还原**：`main.c` 6738→大小 7030 bytes 与 11-18 基线一致、显示逻辑原样（M1~M4 的 RPM + 占空比）；`control.c` 8638 bytes 与 S2-02 版一致。禁止文件时间戳全未变。
+- **实现要点**：
+  1. `chassis.c` 新增 `prevDistance[4]`、`Chassis_UpdateOdometry(dt, track)`：仅用 `Control_GetDistanceM(i)` 累计距离差分 × `wheelScale[i]`，**禁用 `speed_rpm` 积分位姿**；`d_left=(d0+d2)/2`（M1/M3）、`d_right=(d1+d3)/2`（M2/M4）、`ds=(dL+dR)/2`、`dtheta=(dR−dL)/track`；区间中点角度积分 + `Chassis_WrapToPi()` 归一化；轮距 ≤0 跳过 dtheta。
+  2. 观测速度 `chassisOdomVx/Omega`：LPF alpha=0.15、连续 20 ms 无位移归零；**仅供 Watch，不喂 PID**。
+  3. `Chassis_ResetOdometry()`：关中断保护下对齐 `prevDistance`、清 x/y/yaw/odom。`Chassis_Init()` 内调用一次。
+- **编译**：11-21 **14:20:55** Keil Build，**0 Error / 0 Warning**（Code=13252 / RO=2664 / RW=360 / ZI=3376），`breathing.hex` 45080 bytes。临时测试代码已移除并重编安全基线（目标 0、上电不跑）。
+- **实车验证（人类，临时 OLED + 闭环 0.25 m/s 直行 + 1.5 rad/s 旋转）**：
+  - **定点直行 1.00 m**：实测行驶 1.03 m（误差约 **+3%**，含制动滑行），方向略向右微偏 —— 纯编码器直行距离精度良好，与轮径 0.066404 m 一致。
+  - **原地左转 90°**（按几何轮距 0.20 m 积分到 +90° 停）：车体实际仅逆时针转约 **45°** → **等效滑移轮距约 0.40 m，约为几何轮距 2 倍**。
+- **重要发现（影响 S2-04/S2-05）**：普通四轮 skid-steer 原地旋转横向打滑约 2 倍，单靠几何轮距积分 yaw 误差大。直行距离已较准。→ S2-04 接 IMU 解决打滑下的航向精度；S2-05 标定等效轮距与左右轮差异。
+- **下一步**：S2-04 IMU 标定与 yaw 融合；S2-05 等效轮距标定。
+- CubeMX：否（I2C2 推迟到 S2-04 前）。
+
+## 2026-11-20 21:11 [派单 S2-02 — 差速底盘运动学 收口]
+
+### 阶段 2 第二单完成（vx/omega → 四轮 RPM 下发，已恢复停车基线）
+
+- **改动范围**：仅 `Core/Inc/chassis.h`、`Core/Src/chassis.c`。禁止文件时间戳全未变（`control.h/.c`、`encoder.h/.c`、`pid.h/.c`、`main.c`、`tim.c`、`motor.c`、`breathing.ioc`）。
+- **实现要点**：
+  1. `chassis.h`：`CHASSIS_MAX_OMEGA_RADS` 6.0→**8.5f**，新增 `CHASSIS_MAX_WHEEL_RPM=250.0f`，更新 `chassisTrackWidthM` 注释（默认 0.20f 可写、S2-05 精修）。
+  2. `chassis.c`：引入 `control.h` / `encoder.h`（只读 `WHEEL_DIAMETER_M`）；`chassisTrackWidthM` 默认与 `Chassis_Init()` 设为 **0.20f**；`Chassis_Update(dt)` 实现 `left=vx−ω·track/2` / `right=vx+ω·track/2` → `rpm=v·60/(π·0.066404)` → 乘 `motorGain[i]` → 四轮 ±250 RPM 等比饱和（`scale=250/max|rpm|`，保 vx:omega 比例）→ `Control_SetTargetRpm(i, rpm)` 下发。
+- **WorkBuddy 核对**：差速公式、RPM 换算、gain 相乘、等比饱和、下发调用齐全；**无 `Motor_SetOutput()` 直驱、无 vy/麦克纳姆公式**；最终源码目标锁存 `chassisTargetVx/Omega=0`，临时测试语句已移除，未遗留。
+- **omega 上限依据**：单轮 250 RPM → 0.869 m/s；轮距 0.20 m 下理论自转正极值 `2×0.869/0.20=8.69 rad/s`，取 **8.5** 留余量；组合工况由四轮 ±250 等比饱和兜底。
+- **编译**：11-20 **21:11:08** Keil Build，**0 Error / 0 Warning**（Code=11004 / RO=2632 / RW=348 / ZI=3356），`breathing.hex` 38661 bytes。
+- **实车（人类确认，架空单测）**：`Chassis_SetVelocity(0.0f, 2.0f)`（理论左 −57.5 / 右 +57.5 RPM）→ 实测四轮符号正确（M1/M3 后退、M2/M4 前进，逆时针左转），OLED 四路约 60 RPM 上下稳定浮动。测后移除临时语句、重编回 `vx=0/omega=0` 上电停车基线。
+- **遗留**：0.20 m 为几何粗测，等效轮距待 S2-05 原地旋转标定精修；完整落地直行/旋转/停车联合测试留 S2-TEST。
+- **下一步**：S2-03 整车里程计积分。
+- CubeMX：否。
+
+## 2026-11-20 20:54 [派单 S2-01 v2 — 底盘与里程计接口骨架 收口]
+
+### 阶段 2 第一单完成（接口骨架，车行为与阶段 1 一致）
+
+- **改动范围**：新建 `Core/Inc/chassis.h`、`Core/Src/chassis.c`；`MDK-ARM/breathing.uvprojx` 添加 `..\Core\Src\chassis.c`；`Core/Src/control.c` 严格只改 2 处调用点 + 1 处 include（第 3 行引入 `chassis.h`、第 119 行 `Chassis_Init()` 在 `controlInitialized=1U` 之前、第 222 行 `Chassis_Update(CONTROL_PID_DT)`）。`control.h`、`main.c` 及全部禁止文件未动（时间戳复核）。
+- **接口冻结**：`Chassis_Init()` / `Chassis_SetVelocity(vx, omega)` / `Chassis_Update(dt)` / `Chassis_GetPose(x,y,yaw)`（NULL 检查）/ `IMU_IsAvailable()` / `IMU_GetYaw()` / `IMU_GetYawRate()`（均返回 0）。
+- **SetVelocity 语义（v2 关键点）**：仅 NaN 拒收、轮距未标定且 omega≠0 拒收（置 `chassisCmdRejected=1` 不更新锁存）、`|vx|≤0.869` / `|omega|≤6.0` 截断后锁存 `chassisTargetVx/Omega`；**不换算 RPM、不调 `Control_SetTargetRpm()`、不驱动电机** —— WorkBuddy 核对源码确认无相关调用。
+- **全局默认值**：`chassisTrackWidthM=0`（未标定）、`motorGain[]=wheelScale[]={1,1,1,1}`（相互独立）、`chassisX/Y/Yaw=0`、`chassisTargetVx/Omega=0`、`chassisCmdRejected=0`、`imuAvailable=0`。
+- **omega 上限依据**：单轮 250 RPM → 0.869 m/s；轮距约 0.29 m 粗估 `2×0.869/0.29≈6.0 rad/s`。S2-02 仍需按实测轮距做四轮 ±250 RPM 饱和 / 等比缩放。
+- **编译**：11-20 **20:50:21** Keil Build，**0 Error / 0 Warning**（Code=10628 / RO=2632 / RW=348 / ZI=3356），`breathing.hex` 37602 bytes。
+- **实车（人类确认）**：烧录 20:50 版 hex，上电车静止、OLED 四行 `0000.0 RPM  000%`；此前重插线导致的 M1/M2 编码器插错已排查修复。
+- **遗留**：S2-02 实现运动学与里程计前，需实测左右轮中心距（m）填入 `chassisTrackWidthM`。
+- **下一步**：S2-02 差速运动学。CubeMX/I2C2 按用户裁定推迟到 S2-04 前。
 - CubeMX：否。
 
 ## 2026-11-20 16:31 [阶段 1 正式交付]

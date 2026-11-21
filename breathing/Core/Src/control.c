@@ -1,5 +1,6 @@
 
 #include "control.h"
+#include "chassis.h"
 #include "motor.h"
 #include "encoder.h"
 #include "pid.h"
@@ -115,6 +116,8 @@ void Control_Init(void)
     diagWindowCount = 0U;
 #endif
 
+    Chassis_Init();
+
     controlInitialized = 1U;
 }
 
@@ -215,6 +218,8 @@ void Control_Update(void)
             diagAbsAccum[i] = 0;
         }
     }
+
+    Chassis_Update(CONTROL_PID_DT);
 
 #endif
 }

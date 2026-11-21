@@ -76,7 +76,13 @@
 
 | 项 | 状态 |
 |---|---|
-| 当前阶段 | ✅ **阶段 1 正式交付完成**（11-20 16:31），待移交 Codex 做总览与阶段 2 规划 |
+| 当前阶段 | ✅✅ **阶段 2 已正式收官**（11-21 16:25 验收记录 `AI_COLLAB/ACCEPTANCE/STAGE_02.md`，结论通过、同意进入阶段 3）；**待 Codex 做总览与阶段 3 规划** |
+| 阶段 2 验收 | 核心指标全达标（直行 0.1%、横偏 ≤5cm、定点 −0.7°、IMU 方向正确）；4 项非阻塞未测如实记录；通信归属未定待 Codex 规划 |
+| 航向闭环已验证 | mode 1 直行 2m 横偏 10cm→≤5cm、里程 0.1%；mode 2 转 90°→89.3°/180°→179.3°（**误差 −0.7°**，S2-06B 微调后）；IMU 掉线 SAFE STOP 不盲转 |
+| 标定建议值（待固化） | `chassisTrackWidthM` **0.3703f**（3 次极差 3.24%）、`motorGain[]` **保持全 1.0**（闭环 PI 已 ±0.5%，开环补偿不可用）、`wheelScale[]` **1.015×4**（直行 2m 误差 1.45%）。均未写死，由人类决定是否固化默认值 |
+| 阶段 2 基线 | 阶段 1 安全基线 + `chassis.h/c` + `imu.h/c`：1 ms 差速解算 + 四轮里程计 + IMU 为主 yaw 融合（DWT 2ms 硬超时防死锁）、gain/scale 与轮距 0.20f 可写、±250 等比饱和；`TARGET=0` 上电不跑（11-21 14:56 hex） |
+| IMU 状态 | I2C2（PB10/PB11，400 kHz，0x50）已接；6 轴模式、相对角、**IMU yaw 为主**（编码器打滑 2 倍不可信）；未接时自动回退纯编码器。1000 ms 上电零点收敛；实车逆时针 90°→YAW +90°，`imuYawSign=+1` 方向正确 |
+| **里程计实车关键发现** | 直行 1 m 实测 1.03 m（+3%，良好）；**原地转 90° 实际仅 45° → 等效滑移轮距约 0.40 m ≈ 几何 0.20 m 的 2 倍** —— skid-steer 打滑，单靠几何轮距 yaw 误差大，S2-04 用 IMU、S2-05 标定等效轮距 |
 | 已完成 | 四路 PWM + 方向控制、编码器与轮径标定、PWM 串扰治理、1 ms 闭环 PID、开环标定、KP/KI 整定、阶跃验证 |
 | 未开始 | 阶段 2 底盘运动学、阶段 3 通信与安全、云台 / 视觉 / 发射 / 导航 |
 | 阶段 1 遗留 | 落地 200 RPM 长时间直行对比、上位机指令测试（并入阶段 2）；400 RPM 测试点裁决（§7 第 10 条） |
@@ -227,7 +233,22 @@
 | 4 | 定 KP/KI（先 Ki=0 加 Kp，再加 Ki 消稳态误差）；注意 dt 已从 0.1→0.001，参数需重新整定（并入派单 03） | WorkBuddy 分析数据 + Argon4 改 | 未认领 | 并入 2e |
 | 5 | 按任务单做四轮阶跃测试（0→200/400 RPM、400→0、正反转、四轮一致性）并出验收记录（并入派单 03） | 人类实车 + WorkBuddy 记录 | 未认领 | 并入 2e |
 | 6 | 裁决 400 RPM 超限：100% 实测极速约 330 RPM，**正式按 200 RPM 核定验收** | 人类 | 人类 | ✅ **已裁决**（11-20 16:31）；任务单修订交 Codex 阶段末 |
-| 7 | **移交 Codex 接 MiMo**：总览更新（§6 分工表同步）+ 任务单 400→200 RPM 修订 + 阶段 2 规划 | Codex 接 MiMo | 阶段末 | **下一步**（移交单已备好，见 `AI_COLLAB/HANDOFF_TO_CODEX_STAGE_02.md`） |
+| 7 | **移交 Codex 接 MiMo**：总览更新（§6 分工表同步）+ 任务单 400→200 RPM 修订 | Codex 接 MiMo | 阶段末 | **待办**（阶段 2 规划已完成存档，不重复做） |
+| 2-S2-01 | **阶段 2 第一单**：接口与数据结构骨架（`Chassis_*` / `IMU_*` / gain/scale / 轮距变量） | WorkBuddy 出派单 / Argon4 实现 | Argon4 | ✅ **已完成**（v2 修订版；20:50 编译 0E/0W，人类实车确认车不动/OLED 0000.0；20:54 收口） |
+| 2-S2-02 | **阶段 2 第二单**：差速运动学（vx/omega → 四轮 RPM + 下发 + ±250 饱和） | WorkBuddy 出派单 / Argon4 实现 | Argon4 | ✅ **已完成**（21:11 编译 0E/0W，架空单测旋转符号正确，已恢复停车基线；21:11 收口） |
+| 2-S2-03 | **阶段 2 第三单**：整车里程计积分（四轮累计距离 → x/y/yaw/vx/omega，禁用瞬时 RPM） | WorkBuddy 出派单 / Argon4 实现 | Argon4 | ✅ **已完成**（11-21 14:20 编译 0E/0W，实车直行 +3% / 旋转发现 2 倍打滑，已还原安全基线；14:21 收口） |
+| 2-S2-04 | **阶段 2 第四单**：IMU 标定与 yaw 融合 | WorkBuddy 出派单 / Argon4 + 人类 | Argon4 / 人类 | ✅ **已完成**（15:17 最终 hex 0E/0W；加 1000ms 零点收敛；**实车 IMU:OK、静止 Gz≈0、逆时针转 90°→YAW +90° 方向正确**；15:17 最终确认） |
+| 2-S2-04b | **不接 IMU 上电**确认不死锁（异常场景单测） | 人类实车 | 人类 | **可选补测**（接 IMU 实车正常已间接验证驱动无死锁；异常场景未单测，不阻塞 S2-05） |
+| 2-S2-05 | **阶段 2 第五单**：等效轮距（S2-03 实测约 0.40 m）与左右轮增益/里程 scale 标定 | WorkBuddy 出派单 / Argon4 + 人类 | Argon4 / 人类 | ✅ **已完成**（15:46 收口：轮距 0.3703m、gain 保持 1.0、scale 1.015；15:39 hex 0E/0W） |
+| 2-S2-06 | **航向闭环纠偏**（直行保持 / 定点精确转向） | WorkBuddy 出派单 / Argon4 + 人类 | Argon4 / 人类 | ✅ **已完成**（16:07 hex 0E/0W；直行横偏 ≤5cm、90°→88°/180°→177.7°、掉线 SAFE STOP；16:08 收口） |
+| 2-S2-06B | **定点转向精度微调**（2°→≤1°，低速保底+过冲刹车） | WorkBuddy 出派单 / Argon4 + 人类 | Argon4 / 人类 | ✅ **已完成**（16:20 hex 0E/0W；90°→89.3°、180°→179.3°，误差 −0.7° 优于 ≤1°；16:21 收口） |
+| 2-S2-TEST | **阶段 2 统一验收** | WorkBuddy 整理 / 人类实测 | WorkBuddy | ✅ **已完成**（11-21 16:25 出验收记录 `ACCEPTANCE/STAGE_02.md`，结论通过、阶段 2 收官） |
+| 3-移交 | 阶段末移交 Codex：更新总览 + 定通信归属 + 阶段 3 规划 | Codex 接 MiMo | 未认领 | **下一步**（移交材料见验收记录 §6 + 速览卡） |
+| 3-审单 | Codex 阶段 3 规划两轮审单 | WorkBuddy 审 / Codex 改 | ✅ **闭环** | V1 七条 + V2 五条**全部采纳**；CRC8 两向量经 WorkBuddy 验算通过（0x38/0x3D）、TELEMETRY 26B 自洽；规划定稿 |
+| 3-S3-01 | **阶段 3 第一单**：HC-12 协议与帧格式（纯软件，不碰串口/CubeMX） | WorkBuddy 出派单 / Argon4 实现 | 未认领 | ✅ **已出派单**（`AI_COLLAB/DISPATCHES/STAGE_03/S3_01_PROTOCOL.md`），待发反重力 |
+| 2-遗留-通信 | 基础/完整通信（原 S2-06）归属未定 | 待阶段末 Codex 规划 | 未认领 | 肯定不是阶段 2；不预设阶段 3 |
+| 2-S2-05 | **阶段 2 第五单**：等效轮距与左右轮差异标定（已证实等效轮距约 0.40 m） | WorkBuddy 出派单 / Argon4 + 人类 | 未认领 | 待办 |
+| 2-S2-00 | 实测左右轮中心距（m）填入 `chassisTrackWidthM` | 人类实测 + WorkBuddy 记录 | 人类 | ✅ **已粗测：约 0.20 m**（11-20 20:59，用户称后期再校准）；已记入 PLAN_STAGE_02.md §七细则 1；S2-05 用原地旋转标定精修等效轮距 |
 | 8 | 落地 200 RPM 长时间直行对比测试（架空已验，落地未做） | 人类实车 | 未认领 | 遗留（可并入阶段 2 联调） |
 | 9 | 外部上位机下发指令测试 | 人类 + Argon4 | 未认领 | 遗留（阶段 2 联调） |
 
@@ -266,6 +287,39 @@
 - 2026-11-20 16:31 | 人类用户 | 补测 100% 占空比：四路最大稳态均约 **330 RPM**，确认 400 RPM 超出硬件上限；**拍板阶段 1 验收上限正式核定 200 RPM**，阶段 2 目标 ≤250 RPM（留 20~25% 余量）；已恢复安全基线 | 烧录 11-20 16:30 hex | 阶段 1 正式交付
 - 2026-11-20 16:31 | WorkBuddy | 阶段 1 正式交付：核对安全基线与编译（16:30:21 / 0E/0W）；验收记录改正式版（§0 裁决、100% 极速、400 RPM 豁免、移交）；更新 §2 验收口径、§5 待裁决 6 与下一步 7、§7 第 10 条闭环；产出移交单给 Codex/MiMo | `AI_COLLAB/ACCEPTANCE/STAGE_01.md`、`AI_COLLAB/HANDOFF_TO_CODEX_STAGE_02.md`、CHANGELOG、本文件 | 移交总览与阶段 2 规划
 - 2026-11-20 16:43 | 人类用户 | 确认底盘轮型为**普通轮子**（非麦克纳姆/全向）；并要求阶段 2 四个架构问题（里程计精度/IMU、左右轮 10% 标定、通信分级、派单粒度）先与 Codex 对齐颗粒度，不预设结论 | AI_SYNC §2/§7、移交单 §3.3/§3.4 | WorkBuddy 出对齐提示词，Codex 定后出阶段 2 派单
+- 2026-11-20 17:04 | 人类用户 | 转交 Codex 的阶段 2 完整规划（7 单 S2-01~S2-06+S2-TEST），裁定：**实现细则由 WorkBuddy 定，Codex 只做规划；IMU 选型/引脚到 S2-04 前再立项** | `AI_COLLAB/PLAN_STAGE_02.md` | WorkBuddy 存档 + 拍板细则
+- 2026-11-20 17:04 | WorkBuddy | 阶段 2 规划定稿：Codex 规划存为 PLAN_STAGE_02.md；拍板 6 条细则（轮距两级标定、IMU 延后立项、gain/scale 预留、接口形式与轮序、通信超时 200 ms、±250 等比缩放）；速览卡与 §7 第 13 条改已闭环
+- 2026-11-20 20:54 | WorkBuddy | S2-01 收口：核对两个调用点与 SetVelocity 无下发、安全宏原样、禁止文件未动；追加 CHANGELOG 20:54 节；§2 进度转阶段 2、§5 S2-01 完成 + 新增 S2-02 与轮距阻塞项、§6 广播三条、§7 第 19 条标已闭环（WorkBuddy）
+- 2026-11-20 20:59 | 人类用户 | 实测左右轮中心距约 **0.20 m（20 cm，粗测，后期校准）**；WorkBuddy 验算：理论 omega 上限 8.69 rad/s，当前代码 6.0 rad/s 偏保守但安全，S2-02 按实测轮距重算 | PLAN_STAGE_02.md §七细则 1、AI_SYNC §5 待办 2-S2-00 | 轮距阻塞解除，可出 S2-02 派单
+- 2026-11-20 21:11 | Argon4/反重力 | S2-02 落地：chassis.h/c 实现差速逆解算 + gain + 四轮 ±250 等比饱和 + Control_SetTargetRpm 下发；omega 上限 8.5f、轮距默认 0.20f | Core/Inc/chassis.h、Core/Src/chassis.c | 21:11:08 hex，0 Error / 0 Warning
+- 2026-11-20 21:11 | 人类用户 | 架空单测：SetVelocity(0, 2.0) 理论左 −57.5/右 +57.5 RPM，实测符号正确（M1/M3 退、M2/M4 进，逆时针左转），OLED 约 60 RPM 稳定；测后恢复 vx=0/omega=0 停车基线 | 烧录 21:11 版 hex | S2-02 验收通过
+- 2026-11-20 21:11 | WorkBuddy | 收口：核对差速公式/RPM 换算/gain/等比饱和/下发齐全、无 Motor_SetOutput 直驱与 vy、禁止文件未动、无临时测试遗留；追加 CHANGELOG 21:11 节，§2 基线更新、§5 S2-02 完成 + 新增 S2-03 | CHANGELOG.md、AI_SYNC.md、AI_WORKLOG_WORKBUDDY.md | 下一步：出 S2-03 派单
+- 2026-11-21 14:21 | Argon4/反重力 | S2-03 落地：chassis.h/c 实现累计距离差分里程计（wheelScale 修正、中点积分、wrap、odom LPF、复位），临时 OLED 测试后彻底还原 main.c/control.c | Core/Inc/chassis.h、Core/Src/chassis.c | 14:20:55 hex，0 Error / 0 Warning
+- 2026-11-21 14:21 | 人类用户 | 实车验证：直行 1 m 实测 1.03 m（+3% 良好）；**原地转 90° 实际仅 45° → 等效滑移轮距约 0.40 m（几何 0.20 m 的 2 倍）**；临时代码已还原、重编安全基线 | 烧录 14:20 版 hex | S2-03 验收通过；关键发现入规划
+- 2026-11-21 14:21 | WorkBuddy | 收口：核对里程计用累计距离差分、无 speed_rpm 积分、odom 不喂 PID、main.c/control.c 已还原（字节数与基线一致）、禁止文件未动；追加 CHANGELOG 14:21 节；§2 加关键发现、§5 S2-03 完成 + 新增 S2-04/S2-05、PLAN §七记录 2 倍打滑 | CHANGELOG.md、AI_SYNC.md、PLAN_STAGE_02.md | 下一步：S2-04（先 CubeMX 配 I2C2）
+- 2026-11-21 14:39 | 人类用户 | 按反重力指导在 CubeMX 启用 I2C2（PB10/PB11，400 kHz）并生成代码；Keil 中六个手动 Add 的 .c 全部保留；编译 0 Error / 0 Warning（Code=13388） | breathing.ioc、i2c.c、main.c、uvprojx | S2-04 W0 架构变更完成
+- 2026-11-21 14:39 | WorkBuddy | 核对 W0：.ioc I2C2 配置正确、i2c.c hi2c2/MX_I2C2_Init/400000/AF4 齐全、main.c 第 99 行调用在、六 .c 全在、I2C1 未动；§5 待办 2-S2-04 与 §7 第 18 条标 W0 完成 | AI_SYNC.md | 发 S2-04 W1~W4 代码提示词
+- 2026-11-21 14:47 | 人类用户 | S2-04 审单：发现 1 致命死锁（SysTick 内 HAL_GetTick 超时）+ 3 SDK/边界细节；WorkBuddy 查证 REG.h/wit_c_sdk.c 后全部采纳，派单重写为 v2 | S2_04_IMU_FUSION.md v2、AI_SYNC §7 第 19b 条 | 发 v2 代码提示词
+- 2026-11-21 14:56 | Argon4/反重力 | S2-04 v2 落地：新建 imu.h/c（裸寄存器 I2C2 + DWT 2ms 硬超时 + 总线恢复 + 14 字节连读 + 解锁配置），chassis.h/c 加 10ms 分频与 IMU 为主融合，Keil Add imu.c | Core/Inc/imu.h、Core/Src/imu.c、chassis.h/c、uvprojx | 14:56:15 hex，0 Error / 0 Warning
+- 2026-11-21 15:04 | WorkBuddy | 收口：核对 imu.c 无 HAL_I2C 调用、DWT 双层兜底、分频在 chassis.c 249-254 行、配置序列 KEY 解锁无 0x53、GZ 连读字节序与换算、IMU 为主且回退逻辑、IMU yaw 未喂 PID；禁止文件未动；追加 CHANGELOG 15:04 节、§2 加 IMU 状态、§5 S2-04 完成 + 新增 2-S2-04b 实测待办与 S2-05、§7 第 19b 闭环 | CHANGELOG.md、AI_SYNC.md、AI_WORKLOG_WORKBUDDY.md | 下一步：S2-05；未接 IMU 防死锁实测待人类
+- 2026-11-21 15:17 | 人类用户 | S2-04 最终版实车：接线 3V3/GND/PB10/PB11 与 OLED 隔离；临时 OLED 显示 `IMU:OK`、静止 Gz≈0、1000ms 收敛后 YAW 稳定 0.0°；**逆时针转 90°→YAW +90°，`imuYawSign=+1` 方向正确**；临时测试 main.c 已完整还原 | 烧录最终 hex | S2-04 实车闭环通过
+- 2026-11-21 15:17 | WorkBuddy | 最终版确认：核对 1000ms 收敛代码（imuWarmupCount=100，390-394 行）、main.c 7049 bytes 无 IMU 测试残留、编译 0E/0W（Code=14968）；记录 hex 时间偏差（报 15:15:01 / 实际 15:17:01）；追加 CHANGELOG 15:17 节、§2 IMU 状态、§5 S2-04 完成与 2-S2-04b 降为可选 | CHANGELOG.md、AI_SYNC.md | 下一步：出 S2-05 派单
+- 2026-11-21 15:41 | 人类用户 | 裁定**基础电脑通信（原 S2-06）肯定不是阶段 2 任务**，暂不指定归属阶段 | PLAN_STAGE_02.md、AI_SYNC §7 第 20 条 | WorkBuddy 从规划/待办/派单/速览卡移除 S2-06，归属留空待阶段末 Codex 规划
+- 2026-11-21 15:46 | Argon4/人类 | S2-05 实车标定完成：3 次原地转得等效轮距 0.3703m（极差 3.24%）；四轮开环 20/40/60/80% 测 RPM；2m 地砖直行纵向误差 1.45%；临时 main.c 还原、15:39:54 hex 0E/0W | chassis.h/c（只读观测量）、main.c（还原） | S2-05 验收通过
+- 2026-11-21 15:46 | WorkBuddy | 收口：核对只加只读观测量、默认值未写死、轮径未改、main.c 无残留、禁止文件未动；采纳「闭环下 motorGain 保持 1.0」结论并从回传中纠正错误 S2-06 编号；追加 CHANGELOG 15:46 节、§2 标定建议值、§5 S2-05 完成 + S2-TEST/航向闭环遗留、§7 第 21 条 | CHANGELOG.md、AI_SYNC.md、AI_WORKLOG_WORKBUDDY.md | 下一步：S2-TEST 统一验收
+- 2026-11-21 15:51 | 人类用户 | 采纳反重力建议：**先做航向闭环纠偏单，再进 S2-TEST**；沿用 S2-06 编号（原通信单已移出） | `AI_COLLAB/DISPATCHES/STAGE_02/S2_06_HEADING_CONTROL.md` | WorkBuddy 出派单并标注编号复用
+- 2026-11-21 15:51 | WorkBuddy | 新增 S2-06 航向闭环派单（W0 固化 0.3703/1.015 + W1 模式接口 + W2 航向环覆盖 omega + W3 到达判据 + W4 隔离）；更新 PLAN/README/§5 待办/§7 第 22 条区分编号 | PLAN_STAGE_02.md、README.md、AI_SYNC.md、S2_06_HEADING_CONTROL.md | 发反重力
+- 2026-11-21 16:08 | Argon4/人类 | S2-06 航向闭环完成：固化 0.3703/1.015/gain1.0；mode1 直行 2m 横偏 10cm→≤5cm、里程 0.1%；mode2 转 90°→88°/180°→177.7°（≤5°）；IMU 掉线 SAFE STOP 不盲转；main.c 还原、16:07:32 hex 0E/0W | chassis.h/c、main.c（还原） | S2-06 验收通过
+- 2026-11-21 16:08 | WorkBuddy | 收口：核对航向环在差速解算前覆盖 omega、速度 PID 未碰、mode2 掉线清零停车、到达判据、固化值 Watch 可写、禁止文件未动、main.c 无残留；追加 CHANGELOG 16:08 节、§2 航向闭环已验证、§5 S2-06 完成与 S2-TEST 下一步、§7 第 22 条闭环 | CHANGELOG.md、AI_SYNC.md、AI_WORKLOG_WORKBUDDY.md | 阶段 2 实现单全完成 → S2-TEST
+- 2026-11-21 16:21 | Argon4/人类 | S2-06B 完成：TOL 0.05→0.017→0.008f、SETTLE 150ms、低速保底 minOmega 0.06、过冲反向、超时 8s；实车 90°→89.3°/180°→179.3°（−0.7° 优于 ≤1°）；main.c 还原、16:20:31 hex 0E/0W | chassis.h/c、main.c（还原） | S2-06B 验收通过
+- 2026-11-21 16:21 | WorkBuddy | 收口：核对 mode1 传 is_point_turn=0 仍纯比例、mode2 四级分段与钳位、掉线保护未动、超时在、参数可写、禁止文件未动、main.c 无残留；追加 CHANGELOG 16:21 节、§2 更新 89.3°/179.3°、§5 S2-06B 完成、§7 第 23 条闭环 | CHANGELOG.md、AI_SYNC.md、AI_WORKLOG_WORKBUDDY.md | **阶段 2 实现全完成 → S2-TEST 收官**
+- 2026-11-21 16:25 | WorkBuddy | **S2-TEST 收官**：对照 PLAN §五逐项验收，出 `ACCEPTANCE/STAGE_02.md`（结论通过）；核心指标全达标、4 项非阻塞未测如实记录、5 条工程结论沉淀、移交 Codex（更新总览 + 定通信归属 + 阶段 3 规划）。README 加验收记录入口、§2 转阶段 2 收官、§5 S2-TEST 完成 + 3-移交 | ACCEPTANCE/STAGE_02.md、README.md、AI_SYNC.md | **阶段 2 正式收官，待 Codex**
+- 2026-11-21 20:30 | 人类用户 | 转交 Codex 阶段 3 规划（HC-12 + 补测），WorkBuddy 审查：查证 HC-12 手册 + 核对工程 .ioc | REVIEW_STAGE_03_PLAN.md、AI_SYNC §7 第 24 条 | 出审单意见，待 Codex 修订
+- 2026-11-21 20:30 | WorkBuddy | 阶段 3 审单：3 必改（半双工时序/波特率方向/USART1 架构变更）+ 4 建议；核对 PA9/PA10 空闲、M1 是 PE9 不冲突；README 加入口、§5 加 3-审单、§7 第 24 条 | REVIEW_STAGE_03_PLAN.md、README.md、AI_SYNC.md | 发 Codex 审单提示词 |
+- 2026-11-20 17:24 | 人类用户 | 提供 IMU 模块淘宝链接（亚博智能 GPS/北斗+IMU 惯导，MF168）；WorkBuddy 查证官方规格登记到 PLAN_STAGE_02.md S2-04：自带卡尔曼解算直出 yaw（简化实现），但九轴 yaw 为绝对角（东北天）与车体相对 yaw 冲突，已定用 `wrap(raw−yaw0)` 转相对角 | PLAN_STAGE_02.md S2-04、AI_SYNC §7 第 15 条 | 待确认版本(6/9/10轴)、裸机/外壳、供电、UART/I2C、引脚、安装方向；S2-04 派单前必须确认
+- 2026-11-20 20:54 | Argon4/反重力 | S2-01 v2 落地：新建 chassis.h/c、Keil Add chassis.c、control.c 严格两处调用（119 行 Chassis_Init、222 行 Chassis_Update(CONTROL_PID_DT)）+ 3 行 include；SetVelocity 仅校验锁存不下发电机 | Core/Inc/chassis.h、Core/Src/chassis.c、Core/Src/control.c、uvprojx | 20:50:21 hex，0 Error / 0 Warning
+- 2026-11-20 20:54 | 人类用户 | 实车确认 S2-01：烧录 20:50 版 hex，车静止、OLED 四行 `0000.0 RPM 000%`；此前重插线导致的 M1/M2 编码器插错已修复 | 烧录 20:50 版 hex | S2-01 验收通过
+- 2026-11-20 20:54 | WorkBuddy | 收口：核对两个调用点精确位置、安全宏原样、SetVelocity 无 RPM 换算/电机调用、禁止文件时间戳未动；追加 CHANGELOG 20:54 节；§2 进度转阶段 2、§5 S2-01 完成 + 新增 S2-02/轮距阻塞项 | CHANGELOG.md、AI_SYNC.md、AI_WORKLOG_WORKBUDDY.md | 下一步：出 S2-02 派单；轮距实测待人类 | | PLAN_STAGE_02.md、BRIEF_FOR_CODEX.md、AI_SYNC.md | 出 S2-01 派单
 ```
 
 ---
@@ -286,8 +340,20 @@
 | 10 | **【已裁决闭环】400 RPM 测试点超出硬件上限**：**100% 占空比实测四路最大稳态约 330 RPM**（11-20 补测，车架空） | `TASK_STAGE_01_PID.md` 的 0→400、400→0、四轮 400 RPM 一致性测试物理上无法通过 | **人类 11-20 拍板：阶段 1 验收上限正式核定 200 RPM**，400 RPM 测试点豁免；阶段 2 目标 ≤250 RPM（留 20~25% 余量）。任务单由 Codex 接 MiMo 阶段末修订 |
 | 11 | **阶段 1 遗留测试**：落地 200 RPM 长时间直行对比、外部上位机下发指令 | 架空单轮/四轮已验，真实地面与外部指令未验 | 并入阶段 2 运动学联调；不影响阶段 1 速度环核心验收 |
 | 12 | **【已确认】底盘轮型**：人类 11-20 确认为**普通轮子**，四轮独立驱动差速底盘（skid-steer），无独立侧移 | 阶段 2 运动学必须按 vx + omega 两自由度做，不能按麦克纳姆全向模型；斜行只能转向+前进近似 | 已写入 `AI_COLLAB/HANDOFF_TO_CODEX_STAGE_02.md`，Codex 按此规划 |
-| 13 | **【已闭环】** 阶段 2 四题颗粒度：Codex 已完成规划（7 单 S2-01~S2-06+S2-TEST），用户裁定实现细则由 WorkBuddy 定 | 存档 `AI_COLLAB/PLAN_STAGE_02.md` | 结论：IMU 到 S2-04 前立项；motor_gain/wheel_scale 分开且 S2-01 预留；通信基础版超时 200 ms；轮距不猜数值用可写变量 + 两级标定。见 `PLAN_STAGE_02.md` §七 |
+| 13 | **【已闭环】** 阶段 2 四题颗粒度：Codex 已完成规划，用户裁定实现细则由 WorkBuddy 定 | 存档 `AI_COLLAB/PLAN_STAGE_02.md` | 结论：IMU 到 S2-04 前立项；motor_gain/wheel_scale 分开且 S2-01 预留；轮距不猜数值用可写变量 + 两级标定。**通信已移出阶段 2（见第 20 条）** |
+| 20 | **【通信归属调整 11-21 15:41】** 用户裁定基础电脑通信（原 S2-06）**肯定不是阶段 2 的任务**，但暂不指定放哪个阶段 | 阶段 2 现为 S2-01~S2-05 + S2-TEST | 规划/同步板/派单/速览卡已全部移除 S2-06；归属留空待阶段末 Codex 规划，不预设阶段 3；参考口径存档 PLAN §七细则 5 |
+| 21 | **【闭环下 motorGain 不可用开环值 — 11-21 15:46 实测结论】** S2-05 实测：开环 M4 偏慢 8%、前馈比 1.076，但闭环 PI（KP=0.4/KI=2.5）在 `motorGain=1.0` 下已把四轮拉到 99.5~100.2 RPM（±0.5%） | 若写入开环比值会强迫 M4 快 11% 导致左偏 | **闭环下 motorGain[] 保持全 1.0**；开环补偿值仅存档参考，除非改为前馈到 PWM 占空比。已写入 CHANGELOG 15:46 |
+| 22 | **【S2-06 编号复用 11-21 15:51，已闭环 16:08】** 人类采纳反重力建议，新增**航向闭环纠偏单**并沿用 S2-06 编号（原 S2-06 基础通信 15:41 已移出阶段 2） | 两单内容无关：新 S2-06=航向闭环（直行保持/定点转向）；原 S2-06=UART 通信（归属未定） | 16:08 实车全项通过；阶段 2 六张实现单全部完成 |
+| 23 | **【定点精度微调 11-21 16:10，已闭环 16:21】** 用户要求进 TEST 前把 mode 2 误差从 ~2° 压到 ≤1° | S2-06 容差 0.05rad(2.86°) 导致停前 2° | 未单纯改容差（1° 时 0.9 RPM 静摩擦卡死），用低速保底+过冲反向+超时；**实测误差 −0.7° 优于目标**，TOL 最终 0.008f、minOmega 0.06f；mode1 仍纯比例未回归 |
+| 24 | **【阶段 3 规划审单 11-21 20:30】** Codex 阶段 3 规划（HC-12 + 补测），WorkBuddy 审查 | HC-12 官方手册 v2.3B 查证 + 本工程 .ioc 核对 | V1：3 必改 + 4 建议，**Codex V2 全部采纳**（9600、主从轮询、架构变更、分模式验收、Python、CRC8） |
+| 25 | **【阶段 3 V2 审单 11-21 20:40，已闭环 20:46】** 修订版真 bug | 核对 `chassis.c` 466-500 行：航向环每帧覆盖 omega | Codex 全采纳：统一 `Chassis_ForceStop()`（清 vx/omega+置 `chassisHeadingMode=0`+reached 置位+四路 RPM 写0，优先级>一切模式）；CMD_MODE 只切 `chassisYawFusionMode`；补 DATA 字节数表（TELEMETRY 26B）、CRC8 向量**经 WorkBuddy 验算 0x38/0x3D 均正确**；配置先于接线；丢帧计数 STM32 统计。**阶段 3 规划定稿** |
 | 14 | **【省 token 约定】** Codex 阶段末只读 `AI_COLLAB/BRIEF_FOR_CODEX.md`（~60 行速览卡），细节按指针跳读；**不要默认全文通读** CHANGELOG(229)/AI_SYNC(322)/移交单(121) | 用户 11-20 提出全读太耗 token | 已建速览卡并在 README、移交单 §2 写明分层阅读规则 |
+| 15 | **【IMU 已选型，待确认版本】** 用户 11-20 提供淘宝链接：亚博智能 GPS/北斗 + IMU 惯导模块（MF168）。自带 32 位 MCU + 卡尔曼姿态解算，直接输出 yaw 角（UART 或 I2C，5V/3.3V）。**九轴 yaw 是绝对角（东北天、0°=北、不能归零），与车体相对 yaw 冲突** → 已定方案：`IMU_GetYaw()` 返回相对角 `wrap(raw − yaw0)` | 若确认是外壳版只能 USB，不适合 STM32；GPS 室内无效阶段 2 不用 | 详见 `PLAN_STAGE_02.md` S2-04；版本（6/9/10轴）、裸机/外壳、供电、UART/I2C、引脚、安装方向**待用户确认**，确认前不得接线或改 `.ioc` |
+| 16 | **【IMU 适用性评估 11-20 18:59】** 模块适合本项目（自带解算直出 yaw、精度远超验收线），但用法保守：① **波特率必须改 115200**（默认 9600 不够 100~200 Hz 输出，会丢帧）② **优先 6 轴模式**（仅陀螺仪 + 编码器，先不启用磁力计，避开 66 mm 小车的电机磁场干扰）③ 远离电机安装、Z 轴朝上 | 用默认 9600 或一上来开 9 轴会导致丢帧 / yaw 跳变 | 已写入 `PLAN_STAGE_02.md` S2-04「适用性评估」；S2-04 派单按此约束出 |
+| 17 | **【IMU 资料查证 + 接口定案 11-20 19:17，前置全齐 19:25，接口 19:31 纠正】** 用户提供 `D:\stm32\imu(10zhou)`（简介 PDF + 串口/I2C 例程源码）。确认：**10 轴**维特 WT 系列（wit_c_sdk），SDK 直供 `Yaw` 寄存器 0x3f 无需自算姿态；供电 3.3V；按 6 轴模式用。人类 19:25 确认**裸机版、Z 轴朝上、XY 轴实物装好后软件标定** | 原「与 OLED 共用 I2C1」方案错误已废弃：`OLED_Refresh()` 阻塞 90 ms 会让 100 Hz 的 IMU 丢数据 | **最终接口：独立 I2C2（PB10/PB11，400 kHz，地址 0x50）**，已核对 `.ioc` 中 PB10/PB11 空闲；OLED 保持 I2C1 不变。备选 UART 115200 |
+| 18 | **【✅ 已完成 11-21 14:39】S2-04 架构变更**：启用 I2C2（PB10=SCL/PB11=SDA，400 kHz），由反重力指导、人类在 CubeMX 亲手操作 | WorkBuddy 核对：`.ioc` I2C2 Fast mode、PB10/PB11 信号正确；`i2c.c` 有 `hi2c2`/`MX_I2C2_Init()`/400000/AF4；`main.c` 第 99 行调用在；Keil 六 .c 全在；14:39 hex 0E/0W | I2C1（OLED）未动，两总线物理隔离；W0 完成 |
+| 19b | **【已闭环 11-21 15:04】S2-04 派单 v2 审单**：① **致命** SysTick 内 `HAL_I2C_Mem_Read` 的 `HAL_GetTick` 超时会死锁（IMU 未接/NACK）→ 改 **DWT->CYCCNT 硬超时 2 ms**，`IMU_Init` 仅在 main 阶段用 HAL ② 10ms 分频写在 `Chassis_Update()`（chassis.c），非 control.c ③ `IMU_GetYawRate` 读 GZ(0x39)，`raw/32768*2000*pi/180`，从 0x39 连读 14 字节取 GZ+Yaw ④ 写 AXIS6/RRATE/RSW 前先 KEY(0x69)=0xB588 解锁；**WIT_ANGLE(0x53) 是串口包类型非 I2C 寄存器**，删除该错误 | WorkBuddy 已逐项查 REG.h/wit_c_sdk.c 核对无误 | **15:04 收口核对：imu.c 无 HAL_I2C 调用、DWT 双层兜底、分频在 chassis.c、配置序列含解锁无 0x53、IMU 为主且可回退、IMU yaw 未喂 PID —— 代码层全通过**；实测待人类 |
+| 19 | **【已闭环 11-20 20:54】S2-01 审单**：2 阻塞项 —— ① `control.c` 未放行却要调 `Chassis_Update(CONTROL_PID_DT)`（宏只在 control.c）→ 放行 control.c 且仅限 `Control_Init()` 末尾调 `Chassis_Init()`、`Control_Update()` 调 `Chassis_Update()` 两点，`main.c` 完全不动 ② `SetVelocity()` 语义不明 → 定死「仅校验+锁存目标，不换算 RPM/不下发电机」，新增 `chassisTargetVx/Omega`/`chassisCmdRejected`/`imuAvailable` 可观测 | 3 建议也全采纳：IMU 标记定名、omega 依据与 S2-02 饱和说明、验收改静态核对+上电为主 | **20:54 收口核对：两个调用点精确（119/222 行）、SetVelocity 无 RPM 换算/电机调用、安全宏原样；S2-01 已完成** |
 
 ---
 

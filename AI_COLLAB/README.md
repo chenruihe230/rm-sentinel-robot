@@ -19,16 +19,30 @@ Keil 工程目录：D:\stm32\stm32f4\breath\breathing
 AI_COLLAB\
 ├── README.md                          ← 本文件：索引与阅读顺序
 ├── BRIEF_FOR_CODEX.md                 ← Codex 决策速览卡（阶段末只读这一张）
+├── PLAN_STAGE_02.md                   ← 阶段 2 正式规划 + WorkBuddy 拍板的 6 条细则
+├── REVIEW_STAGE_03_PLAN.md            ← 阶段 3 规划审单意见 V1（3 必改 + 4 建议，全采纳）
+├── REVIEW_STAGE_03_PLAN_V2.md         ← 阶段 3 规划审单意见 V2（1 真 bug + 2 说清项）
 ├── AI_SYNC.md                         ← 所有 AI 共用的状态同步板（第一入口）
 ├── AI_WORKLOG_WORKBUDDY.md            ← WorkBuddy 自己的工作流水
 ├── CHANGELOG.md                       ← 代码/文档改动历史（追加式）
 ├── DISPATCHES\                        ← 派单（按阶段分目录）
-│   └── STAGE_01\
-│       ├── DISPATCH_01_ENCODER.md     ← 编码器测速夯实 + 里程计
-│       ├── DISPATCH_02_PID_1MS.md     ← 1 ms 速度 PID（方案 A）
-│       └── DISPATCH_03_TUNE_AND_TEST.md ← 开环标定 + KP/KI 整定 + 阶跃验收
+│   ├── STAGE_01\
+│   │   ├── DISPATCH_01_ENCODER.md     ← 编码器测速夯实 + 里程计
+│   │   ├── DISPATCH_02_PID_1MS.md     ← 1 ms 速度 PID（方案 A）
+│   │   └── DISPATCH_03_TUNE_AND_TEST.md ← 开环标定 + KP/KI 整定 + 阶跃验收
+│   ├── STAGE_02\
+│   │   ├── S2_01_INTERFACE.md         ← 阶段 2 接口与数据结构（骨架）✅完成
+│   │   ├── S2_02_KINEMATICS.md        ← 差速运动学 vx/omega→四轮RPM ✅完成
+│   │   ├── S2_03_ODOMETRY.md          ← 整车里程计（累计距离→x/y/yaw）✅完成
+│   │   ├── S2_04_IMU_FUSION.md        ← IMU 接入与 yaw 融合 ✅完成
+│   │   ├── S2_05_CALIBRATION.md       ← 等效轮距/左右轮差异标定 ✅完成
+│   │   ├── S2_06_HEADING_CONTROL.md   ← 航向闭环纠偏 ✅完成
+│   │   └── S2_06B_HEADING_TUNE.md     ← 定点转向精度微调（2°→≤1°）✅完成
+│   └── STAGE_03\
+│       └── S3_01_PROTOCOL.md          ← HC-12 协议与帧格式（纯软件定义）
 └── ACCEPTANCE\
-    └── STAGE_01.md                    ← 阶段 1 验收记录
+    ├── STAGE_01.md                    ← 阶段 1 验收记录
+    └── STAGE_02.md                    ← 阶段 2 验收记录（收官）
 ```
 
 **阶段 2 开始后**：派单放 `DISPATCHES\STAGE_02\`，验收记录放 `ACCEPTANCE\STAGE_02.md`，依此类推。

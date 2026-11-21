@@ -280,6 +280,21 @@
 
 **边界守住**：用户已拍板 200 RPM，我把裁决写进文档；但 `TASK_STAGE_01_PID.md` 与 `PROJECT_OVERVIEW.md` 是 Codex 的正式文档，我**没动**，只在移交单里列出应改事项。符合「阶段末总览归 Codex」的分工。
 
+### 2026-11-20 20:54 — S2-01 v2 收口（阶段 2 第一单完成）
+
+用户报 S2-01 完成并要求收口。按 §1.1 SOP 先核对源码再落笔 —— 尤其 v2 修订的两处调用点和 SetVelocity 语义。
+
+**核对结果**（全部通过）：
+- 新建 `chassis.h/c`（19:55）；`control.c` 20:50 改动；hex 20:50:21 / 37602 bytes；Build 0E/0W（Code=10628 / RO=2632 / RW=348 / ZI=3356）。
+- **两个调用点精确**：第 3 行 include、第 119 行 `Chassis_Init()`（在 121 行 `controlInitialized=1U` 之前）、第 222 行 `Chassis_Update(CONTROL_PID_DT)`。全部 `CONTROL_*` 安全宏原样（TARGET=0、PID_PERIOD=1、LPF=0.20、ZERO_GUARD=20、KP/KI/KD=0.4/2.5/0、OPEN_LOOP=0、DUTY=0）。
+- **SetVelocity 语义**：`chassis.c` 第 35-73 行确认只做 NaN 拒收、轮距未标定拒收、限幅截断、锁存 `chassisTargetVx/Omega`；**无 `Control_SetTargetRpm()`、无 `Motor_SetOutput()`、无 RPM 换算** —— v2 最关键的一条守住了。
+- 全局变量默认值全对；`Chassis_GetPose()` 有 NULL 检查；IMU 三个接口返回 0。
+- uvprojx 第 423/425 行确认 `chassis.c` 已 Add；禁止文件时间戳全未变；`main.c`/`control.h` 未改。
+
+**落记录**：CHANGELOG 追加 20:54 节；AI_SYNC §2 进度转阶段 2 + 阶段 2 基线、§5 S2-01 完成 + 新增 2-S2-02 与 2-S2-00 轮距阻塞项、§6 广播三条、§7 第 19 条标已闭环、§9 维护记录。
+
+**遗留**：轮距实测（S2-02 前置之一，已列阻塞项）。CubeMX/I2C2 按用户裁定推迟到 S2-04 前。**下一步**：出 S2-02 差速运动学派单。
+
 **阶段 1 至此正式收工**。下一步全部在 Codex 侧：修订两份正式文档 + 出阶段 2 版本规划；之后 WorkBuddy 按 Codex 定的接口出阶段 2 派单。
 
 ---

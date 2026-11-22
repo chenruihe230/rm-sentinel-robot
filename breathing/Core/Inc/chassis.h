@@ -80,6 +80,7 @@ extern uint8_t chassisHeadingTimedOut;       /* 定点转向是否因超时停�
 /* 底盘与 IMU 接口（签名冻结） */
 void Chassis_Init(void);
 void Chassis_SetVelocity(float vx, float omega);       /* m/s, rad/s */
+void Chassis_ForceStop(void);                          /* 统一安全强停（清目标/退航向环/置到达/四路归零） */
 void Chassis_SetHeadingTarget(float target_rad);       /* 进入 mode 2 定点转向，目标绝对相对零点角（rad） */
 void Chassis_EnableHeadingHold(uint8_t enable);        /* 1=锁存当前 IMU 航向进入 mode 1，0=退回 mode 0 */
 void Chassis_Update(float dt);                         /* 由 Control_Update 每 1 ms 调 */

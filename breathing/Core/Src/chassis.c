@@ -1,4 +1,6 @@
 #include "chassis.h"
+#include "comm_actions.h"
+#include "comm_session.h"
 #include "control.h"
 #include "encoder.h"
 #include <math.h>
@@ -285,27 +287,17 @@ void Chassis_Init(void)
         wheelScale[i] = CHASSIS_DEFAULT_WHEEL_SCALE;
     }
 
-    chassisTargetVx = 0.0f;
-    chassisTargetOmega = 0.0f;
+    Chassis_ForceStop();
     chassisCmdRejected = 0U;
     chassisYawFusionMode = 1U;
-    chassisHeadingMode = 0U;
     chassisHeadingTargetRad = 0.0f;
-    chassisHeadingErrRad = 0.0f;
     chassisHeadingKp = CHASSIS_HEADING_DEFAULT_KP;
     chassisHeadingMinOmega = CHASSIS_HEADING_DEFAULT_MIN_W;
     chassisHeadingMaxOmega = CHASSIS_HEADING_DEFAULT_MAX_W;
     chassisHeadingTimeoutMs = CHASSIS_HEADING_DEFAULT_TIMEOUT;
-    chassisHeadingReached = 0U;
-    chassisHeadingTimedOut = 0U;
     imuPollDivider = 0U;
     prevImuAvailable = 0U;
     headingHoldBase = 0.0f;
-    prevHeadingMode = 0U;
-    headingSettleMs = 0U;
-    headingTurnElapsedMs = 0U;
-    prevHeadingErrRad = 0.0f;
-    prevHeadingErrValid = 0U;
 
     IMU_Init();
     if (IMU_IsAvailable() == 0U)
@@ -318,6 +310,27 @@ void Chassis_Init(void)
     }
 
     Chassis_ResetOdometry();
+    Comm_Session_Init();
+}
+
+void Chassis_ForceStop(void)
+{
+    Comm_Action_Abort();
+    chassisTargetVx = 0.0f;
+    chassisTargetOmega = 0.0f;
+    chassisHeadingMode = 0U;
+    prevHeadingMode = 0U;
+    chassisHeadingErrRad = 0.0f;
+    chassisHeadingReached = 1U;
+    chassisHeadingTimedOut = 0U;
+    headingSettleMs = 0U;
+    headingTurnElapsedMs = 0U;
+    prevHeadingErrValid = 0U;
+
+    for (uint32_t i = 0U; i < MOTOR_COUNT; i++)
+    {
+        Control_SetTargetRpm(i, 0.0f);
+    }
 }
 
 void Chassis_SetVelocity(float vx, float omega)
@@ -413,8 +426,8 @@ void Chassis_Update(float dt)
 {
     float track = chassisTrackWidthM;
     float wheel_diam = WHEEL_DIAMETER_M;
-    float vx = chassisTargetVx;
-    float omega = chassisTargetOmega;
+    float vx;
+    float omega;
     float rpm_cmd[MOTOR_COUNT];
     float max_abs_rpm = 0.0f;
 
@@ -427,6 +440,13 @@ void Chassis_Update(float dt)
 
     /* 先更新整车里程计（含 IMU 为主 yaw 融合与不可用自动回退） */
     Chassis_UpdateOdometry(dt, track);
+
+    /* 在 1 ms 控制环中执行串口待处理帧（半双工主从应答 + 200 ms 超时 Chassis_ForceStop） */
+    Comm_Session_Update1ms();
+    Comm_Action_Update1ms();
+
+    vx = chassisTargetVx;
+    omega = chassisTargetOmega;
 
     /* 轮距未标定或轮径无效时，不做运动学解算与下发 */
     if ((track <= 0.0f) || (wheel_diam <= 0.0f))

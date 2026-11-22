@@ -5,6 +5,123 @@
 > 说明：以后每次改动都追加一条到这里（日期 + 改了什么 + 涉及文件 + 是否需要动 CubeMX）。
 > 注意：从 CubeMX 重新生成代码会重写 `MDK-ARM/breathing.uvprojx`，手动加进工程的 .c 文件（pid.c、control.c 等）会被冲掉，需在 Keil 里重新 Add。
 
+## 2026-11-22 20:15 [派单 S3-DEMO v3 — 精度与娱乐性增强 收官]
+
+### 阶段 3 展示层彻底完成（v3 增量，三处纠正全落地）
+
+- **改动范围（WorkBuddy 核对）**：车端仅 `comm_actions.h/c`（19:54），上位机仅 `TOOL\hmi\` 内文件。禁止文件时间戳**全部未变**：`comm_protocol.h/c`（18:09）、`comm_session.h/c`（16:47/18:10）、`chassis.h/c`（15:36/18:10）、`protocol.py`（15:50）、`comm_tool.py`（16:47）、`main.c`（17:34）、`.ioc`（11-21 22:04）。
+- **三处纠正核对通过**：
+  1. **编号**：`COMM_ACTION_RESET_ODOM=0x06`（在 TYPE 0x05 DATA 内）；`COMM_ACTION_HOME_RSVD=0x05` 保持预留；**无新增 TYPE**（仍 01~05,10）。
+  2. **演示级标注**：界面与 `actions.py` 明确"演示级导航（预期落点误差 ~5cm 量级）"。
+  3. **两层打断**：上位机 `_abort_script_queue()` + `tracker.abort()`（WASD/按钮/急停/断开均触发），车端靠已有单一司机 Abort。
+- **W1 梯形减速**：`Comm_Action_ComputeMoveSpeedMps()`（起步 0.08→0.25 m/s/250ms、末端 150mm 降到 0.07 m/s 蠕行）；短距离 <400mm 处理（峰值 0.14、爬升 100ms、减速区 `min(150mm,0.5×target)`、三角形包络）。**⚠️ 回传的停止误差 +0.1mm(1000mm) / +0.6mm(200mm) 均为 `MockStm32Simulator` 仿真数据，非实车** —— 记录标「仿真通过、实车待验证」，不写成精度达标。
+- **W2 归零**：0x06 帧 `AA 55 05 01 06 00 00 86 0D 0A`，Abort→ForceStop→ResetOdometry→DONE；仿真下一帧 X/Y=0、Yaw=0（实车待验证）。
+- **W3/W4/W5**：WASD 八向（W/S/A/D + 组合弧线）+ 三档（0.15/0.30/0.60）+ 松手停 + 空格急停 + QTimer(50ms)；轨迹图金色车头射线 + 双击解算「转 Δyaw → 直行 L」串行（实测双击 (1,1)m 解出 +45°/1414mm）；三预设剧本（正方形 8 步 / 折返 4 步 / 摇摆 4 步）+ DONE 后 0.3s 下发；GUI 无头自检/截图通过。
+- **编译**：11-22 **20:04:37** hex 67797 bytes（Code=21296 / RO=2664 / RW=516 / ZI=3756），0 Error / 0 Warning。
+- **遗留**：**实车物理验证待做**（梯形停止误差、0x06 归零、WASD/双击/剧本实车演练）—— 烧 20:04 hex 跑一轮即可收齐；仿真数据不作为实车结论。
+- **结论**：**阶段 3 展示层（S3-DEMO v1→v2→v3）全部交付完成**；阶段 3 主体验收记录 `ACCEPTANCE/STAGE_03.md` 已于 17:40 通过，本展示层为其收尾补充。
+- CubeMX：否。
+
+## 2026-11-22 19:46 [派单 S3-DEMO v2 收口 + v3 增强派单]
+
+### v2 交付核对通过（参数化动作 API + 可视化上位机）
+
+- **核对**：`comm_protocol.h/c` 仅追加 TYPE 0x05（`LEN=3B`），已有 TYPE 01/02/03/04/10 与 CRC8 向量（0x38/0x3D）未动；新建 `comm_actions.h/c`（5 动作 + 10s 超时 + status bit4..6 回传 RUNNING/DONE/TIMEOUT）；**单一司机规则在 `Comm_ExecuteCommand()` 入口统一收敛**（第 100-104 行，POLL 除外）；`chassis.c` 仅两行（ForceStop 加 Abort 318 行、1ms 环加 Update 446 行）。`protocol.py`/`comm_tool.py`/`.ioc`/control/encoder/imu 时间戳未变。HMI 九文件（PySide6 + pyqtgraph + 原始帧工具 + QThread + Mock 自检）。
+- **编译**：11-22 **18:11:59** hex 66635 bytes（Code=20892），0 Error / 0 Warning。
+- **状态**：v2 交付合格，作为阶段 3 展示层已成型。
+
+### v3 增强派单（用户要更高停止精度 + 操控娱乐性）
+
+- 产出 `AI_COLLAB/DISPATCHES/STAGE_03/S3_DEMO_V3_ENHANCE.md`。WorkBuddy 评估反重力提案后**三处纠正**：
+  1. **编号冲突**：提案的「启用 0x05 做里程计归零」错误 —— TYPE 0x05 已占用、action 0x05 是回起点预留；归零必须用 **action 0x06**（不加新 TYPE）。
+  2. **点地图精度打折**：串联误差累积，定位演示级（~5cm 量级），不承诺精准到达。
+  3. **剧本打断两层做**：上位机清队列 + 车端 Abort，缺一不可。
+- 保留的好想法：梯形减速（起步 250ms 爬升 + 末端 150mm 降到 0.07m/s 蠕行）、里程计归零、WASD 八向 + 三档变速、车头图标 + 双击地图串行导航、三种预设剧本。
+- 硬边界：不动 TYPE/PID/里程计/400ms/已有动作语义；仅 `comm_actions.*` + `TOOL\hmi\`。用 **Argon**。
+- CubeMX：否。
+
+## 2026-11-22 17:36 [派单 S3-04/05 — 阶段 2 遗留五项补测 收口]
+
+### 五项补测全部闭环（零生产代码改动）
+
+- **改动范围**：**零生产代码改动**（`chassis.c` 15:36、`comm_session` 16:47、`comm_protocol` 20:57 等全部原样；`main.c` 临时测试后还原，7049→7095 bytes 与 S3-03 后基线一致、无 `MODE/ODOM ERR` 等测试残留）。`chassis.c:442` 过时注释按可选约定未动（纯注释，见 §7 第 30 条）。
+- **编译**：11-22 Keil Build **0 Error / 0 Warning**（Code=19780 / RO=2664 / RW=476 / ZI=3756）；hex 文件系统时间 **17:36:07**（回传写 17:34:26，同类小偏差按文件系统记），63501 bytes，上电静止。
+- **T1 弧线（v0.2/ω0.8，HC-12 无线）**：内侧 M1=20/M3=14 RPM、外侧 M2=97/M4=99 RPM；**WorkBuddy 验算理论 14.9/100.1 与实测一致**（内侧偏差因打滑）；轨迹左弧 X=+0.114/Y=+0.338/Yaw=+114.80°。**顺带坐实 S3-03B**：6.5~7.1 Hz / RTT 122ms 连续轮询 TX112→191 全程 drop=0/timeout=0，**400ms 超时无误停车**。
+- **T3 原地 360°（分模式）**：**IMU 融合模式**物理转一圈读 `+360.18°`，偏差仅 **+0.18°**（硬指标 ≤10°、目标 ≤5°，实测 ≤1°，大胜）；**纯编码器模式**读 +367.03°（相对 IMU 偏 +6.85°），**只记录不设硬线**（得益于 0.3703 m 标定，精度已大幅提升）。
+- **T4 回起点（全自动 1m×1m 正方形：mode1 直行 4s ×4 + mode2 定点转 90°）**：卷尺实测回起点右偏仅 **3 cm**；OLED `X=+0.003 / Y=-0.013 / YAW=-0.3° / ODOM ERR=0.013 m`。**达到 ≤5 cm 争取线**（亦远优于 ≤10 cm 通过线）。
+- **T2 单轮 1m（0.25m/s 直行 4s，实走 1.040m）**：M1=1.0191m（**2.01%**）、M2=1.0272（1.23%）、M3=1.0191（**2.01%**）、M4=1.0262（1.33%）、整车 chassisX=1.024m（**1.54%**）。**WorkBuddy 独立验算与回传一致**。**如实标注：M1/M3 严格说 2.01% > 硬指标 2%，属压线**（实现方解释为卷尺 cm 级估读 + wheelScale=1.015 四舍五入边界，合理）；整车 1.54% 通过。
+- **T5 模式切换（m1→m0→m1）**：切换无跳变、两模式 yaw 连续平滑、切回 fusion=1 稳定、timeout=0。
+- **遗留**：T2 M1/M3 压线 2.01%（非功能缺陷）；`chassis.c:442` 过时注释（纯注释）。
+- **下一步**：**S3-TEST 阶段 3 统一验收收官**。
+- CubeMX：否。
+
+## 2026-11-22 16:50 [派单 S3-03B — 无线超时 200→400 ms 收口]
+
+### 安全阈值调整完成（Argon 执行）
+
+- **核对通过**：`comm_session.h:27` 宏 `200U→400U`、第 9/20/22 行注释同步；`comm_session.c:213` 注释同步，**判断逻辑（226 行引用宏 + 228-236 flag/count + HAL_GetTick 原子快照/无等待循环）原样未动**；`comm_tool.py` 第 33/213/217 行（`0.5→0.8s`、提示文字 400ms）、`README.md:48/53` 同步；`--timeout-ms` 默认 260 保持。
+- **残留搜索**：四个目标文件无旧阈值残留（仅 `comm_session.c:36` 的 `val+0.5f` 四舍五入表达式，无关）。
+- **编译**：11-22 Keil Build **0 Error / 0 Warning**（Code=19780 / RO=2664 / RW=476 / ZI=3756）；hex 文件系统时间 **16:50:07**（回传写 16:47:42，同类小偏差按文件系统记），63501 bytes，上电静止。
+- **CRC 自检复核**：`protocol.py` 两向量 0x38/0x3D + STOP 帧全过。
+- **⚠️ 已知文档瑕疵（不阻塞）**：`chassis.c:442` 注释仍写「半双工主从应答 + **200 ms** 超时 Chassis_ForceStop」—— 这是描述通信超时、非航向稳定窗口，阈值改 400 后该注释过时。因 `chassis.c` 在本单禁止清单内未动。**下个涉及 chassis.c 的派单带上这处注释修正**。
+- **遗留**：无线 30 s 连续心跳无误停车 / 故意断连 >0.8s 停车 / CMD_STOP 即时性 —— 待人类烧录 16:50 版 hex 实测，或并入 S3-04/05、S3-TEST。
+- **下一步**：S3-04/05 补测 → S3-TEST 阶段 3 收官（高速测试预留 ≥0.5 m）。
+- CubeMX：否。
+
+## 2026-11-22 16:33 [派单 S3-03 — Python 上位机 收口（含 ⚠️ 超时线告警）]
+
+### 阶段 3 电脑端工具完成（有线全项通过 / 无线发现时序隐患）
+
+- **改动范围**：仅新建 `breath\TOOL\` 下 `protocol.py`、`comm_tool.py`、`README.md`、`run_comm.bat`。CRC 自检**独立复跑通过**（0x38 / 0x3D / STOP 帧 `AA 55 03 01 38 0D 0A`）。
+- **实测（WorkBuddy 核对）**：
+  - **有线 USB-TTL 直连 COM6**：POLL 847/847、静止 RPM 全 0；`CMD_VEL(0.2,0)` 四轮 63/58/52/60 RPM、X 推进至 +1.5m；`CMD_STOP` 立即停；`t` 断连 0.5s → timeout 4→5 且停车；`q` 自动 STOP 退出。**19.9 Hz / RTT 44 ms / 丢包 0**。
+  - **HC-12 CH002 无线**：CMD_VEL 车动、遥测 x/y/yaw 更新；seq 03→06 计 drop=2；重复 seq=06 回缓存不累加；间隔 >200ms timeout 5→7→8 且停车。**全功能正确**。
+- **⚠️ 关键时序隐患（必须决策，未解决）**：无线在 9600/FU3 下**实测 RTT 170~180 ms**（半双工实际 ~5.6~5.8 Hz）。上位机是「发一帧等回帧再发下一帧」的严格半双工心跳 → 心跳间隔 ≈175 ms，**距 STM32 `COMM_SESSION_TIMEOUT_MS=200U` 仅余 25 ms**；空口抖动 +30 ms 就会**误触发停车**。这不是 bug 是设计余量不足，**不能带到 S3-TEST 碰运气**。
+  - 方案 A（WorkBuddy 推荐）：**超时放宽到 400 ms** —— 余量 225 ms，代价是真断连停车延迟 0.4 s（0.2 m/s 下多走 ~8 cm），安全可控；
+  - 方案 B：HC-12 提 19200/38400 —— 但手册对应空中 236 kbps、灵敏度 −100 dBm、距离缩短，与"远距离"初衷相悖；
+  - 方案 C：加上位机心跳补偿（收帧即发下一帧，减少等待） —— 受 RTT 物理限制，改善有限。
+  - **待人类拍板后再动 `comm_session.h` 的超时宏**（改宏属安全逻辑变更，按用户偏好建议用 Argon 跑）。
+- **一处如实标注的出入**：回传称 `main.c` 已 SHA256 字节级还原，实测 `main.c` = **7095 bytes / 16:23:25**（此前基线 7049 bytes），hex = 16:31:35 / 63501 bytes。内容核对**无遥控/测试代码残留**，仅 `MX_USART1_UART_Init()`（S3-02 W0 正常生成）+ 中文注释编码差异；但**不能写"字节级还原"**，记录按实标注。
+- **遗留**：超时线决策（上）；无线端到端的完整连续遥控压力测试留 S3-TEST。
+- **下一步**：人类拍板超时方案 → S3-04/05 补测 → S3-TEST。
+- CubeMX：否（仅 TOOL 目录新增文件）。
+
+## 2026-11-22 15:38 [派单 S3-01B + S3-02 — HC-12 配对 + USART1 通信 收口]
+
+### 阶段 3 硬件与通信链路打通（HC-12 CH002 配对、USART1 半双工、强制停车）
+
+**S3-01B（HC-12 配对，人类实测）**：
+- 最终两块一致：**9600 / CH002 / FU3 / P8(+20dBm)**。人工把信道从默认 CH001 改 **CH002 避开干扰**；出厂两块信道原本不同（RC001 vs RC021）。
+- 异常排查：右侧模块**天线断裂**、USB-TTL **3.3V 供电不足**导致发射瞬间掉电吐 `0xFF` → 换天线 + 改 5V 测试供电 + 统一 C002 + SET 悬空退出 AT、断电重启。
+- 实测：`COM6↔COM3` 连续互发 `AAA`/`BBB` **4/4 双向稳定**，往返 ~90~100 ms。
+- 小车接线：HC-12 B TXD→PA10、RXD→PA9、GND 共地、VCC **独立 3.3V 稳压（严禁从 STM32 取电）**、SET 悬空；HC-12 A 留电脑 USB-TTL。
+
+**S3-02（USART1 通信，WorkBuddy 核对）**：
+- W0 架构变更完成：CubeMX 启用 USART1（PA9/PA10，9600 8N1，无流控），**8 个手动 .c 全在**（含 comm_protocol.c），编译 0E/0W。
+- 改动：新建 `comm_uart.h/c`（中断单字节环形缓冲、CRC 校验在 ISR、`HAL_UART_Transmit_IT` 非阻塞回包、ORE 自恢复）+ `comm_session.h/c`（半双工主从会话、序号/丢帧/重发、200ms 超时、26B 遥测）；`chassis.h/c` 新增 `Chassis_ForceStop()` 并在 Init 复用，Init 末尾调 `Comm_Session_Init()`、`Chassis_Update()` 内调 `Comm_Session_Update1ms()`；uvprojx 加两个新 .c。禁止文件时间戳未变（control/encoder/comm_protocol/imu/i2c 均原样）。
+- **`Chassis_ForceStop()` 五件事齐全且三处共用**（Init 289 / CMD_STOP 85 / 超时 235）：清 vx/omega、`chassisHeadingMode=0`+`prevHeadingMode=0`、`chassisHeadingReached=1` 等航向状态归位、四路 `Control_SetTargetRpm(i,0)` 双保险。**航向环覆盖停车的 bug 已根治**。
+- 超时判断：`HAL_GetTick()` 关中断原子快照 + 数值比较、无等待循环（避开 S2-04 死锁坑）；序号 `delta=rx.seq-lastSeq`，`delta==0` 重复（STOP 仍执行）、`delta>1` 计丢包、255→0 回绕正常；CMD_MODE 只写 `chassisYawFusionMode`、不碰 `chassisHeadingMode`；命令**在控制环执行、中断只解析**。
+- **⚠️ 优先级表述纠错（WorkBuddy）**：回传称「USART1 优先级 5、SysTick 15，绝不会饿死 SysTick」—— **推理错误**。Cortex-M 数值越小优先级越高，5 < 15 恰说明 USART1 **高于** SysTick（`TICK_INT_PRIORITY=15U` 已核对），USART1 可抢占 SysTick。实际无碍是因回调仅数微秒，**结论对、理由错**，记录纠正，禁止据此推理去配更高优先级中断。
+- **编译**：11-22 **15:37:05** Keil Build，**0 Error / 0 Warning**（Code=19772 / RO=2664 / RW=472 / ZI=3752），hex 63485 bytes，上电 TARGET=0 静止。
+- **实车**：HC-12 无线链路已通（4/4 互发）；USART1 收发的 20 Hz 遥测/运动/CMD_STOP/200ms 断连停车**待 S3-03 Python 工具联调 + S3-TEST 验收**（当前仅静态核对 + 编译通过）。
+- **下一步**：S3-03（Python + pyserial 上位机）→ S3-04/05 补测 → S3-TEST。
+- CubeMX：是（W0 已由人类操作，完成）。
+
+## 2026-11-21 21:00 [派单 S3-01 — HC-12 协议与纯软件接口 收口]
+
+> 回传单写作「S3-01A」，本工程派单名为 S3-01（同一单，别名标注）
+
+### 阶段 3 第一单完成（协议层，未碰串口/硬件）
+
+- **改动范围**：新建 `Core/Inc/comm_protocol.h`、`Core/Src/comm_protocol.c`，`uvprojx` 加入 comm_protocol.c。禁止文件时间戳全未变（`main.c` 16:20 版、chassis.c 16:19 版、control/encoder/imu/i2c、`.ioc`）；**未调用任何 HAL USART API**。
+- **协议实现**：帧 `AA 55 | TYPE | SEQ | DATA | CRC8 | 0D 0A`；TYPE 表（POLL01/VEL02/STOP03/MODE04/TELEMETRY10）与 DATA 定长（0/4/0/1/26 B）；CRC8 poly0x07/init0/no-reflect/xorout0 覆盖 TYPE+SEQ+DATA；小端定点数；序号回绕/丢帧/重发规则注释齐全；显式小端逐字节编解码（无结构体对齐隐患）。
+- **接口**：`Comm_Crc8` / `Comm_BuildFrame` / `Comm_ParseFrame`（四类错码 -1头/-2尾/-3CRC/-4长度）+ `Comm_GetExpectedDataLen`、Pack/Unpack 系列纯函数。无状态机、无多帧缓冲（留 S3-02）。
+- **验证（WorkBuddy 独立复核，不依赖实现方自测）**：`gcc -Wall -Wextra` 直接编译 `comm_protocol.c` 跑向量 —— CRC `{03 01}=0x38`、`{02 01 64 00 00 00}=0x3D`、`CMD_STOP(seq=1)` 组帧 `AA 55 03 01 38 0D 0A`（7B）、解析返回 0 —— **全部与规划一致**。
+- **编译**：11-21 **20:57:57** Keil Build，**0 Error / 0 Warning**（Code=15752 / RO=2664 / RW=444 / ZI=3460），`breathing.hex` 52182 bytes，行为与 S2-06B 基线一致（上电静止、OLED `0000.0 RPM 000%`）。
+- **遗留**：无（序号跳变/重发状态追踪按约定留 S3-02 会话层）。
+- **下一步**：S3-01B（HC-12 配置：先配后接线）+ S3-02（USART1 架构变更 + 收发 + 统一强制停车 `Chassis_ForceStop()`）。
+- CubeMX：否。
+
 ## 2026-11-21 16:25 [阶段 2 正式收官 — S2-TEST 验收记录]
 
 - **产出** `AI_COLLAB/ACCEPTANCE/STAGE_02.md`：对照 `PLAN_STAGE_02.md` §五逐项验收，结论 **阶段 2 通过、同意收官**。

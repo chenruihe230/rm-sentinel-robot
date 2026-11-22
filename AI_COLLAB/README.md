@@ -22,6 +22,8 @@ AI_COLLAB\
 ├── PLAN_STAGE_02.md                   ← 阶段 2 正式规划 + WorkBuddy 拍板的 6 条细则
 ├── REVIEW_STAGE_03_PLAN.md            ← 阶段 3 规划审单意见 V1（3 必改 + 4 建议，全采纳）
 ├── REVIEW_STAGE_03_PLAN_V2.md         ← 阶段 3 规划审单意见 V2（1 真 bug + 2 说清项）
+├── REVIEW_STAGE_04_PLAN.md            ← 阶段 4 规划审单（状态越权 + 2 处技术空白）
+├── GIMBAL_HARDWARE_FACTS.md           ← 阶段 4 云台硬件事实（WHEELTEC 步进云台，源码查证）
 ├── AI_SYNC.md                         ← 所有 AI 共用的状态同步板（第一入口）
 ├── AI_WORKLOG_WORKBUDDY.md            ← WorkBuddy 自己的工作流水
 ├── CHANGELOG.md                       ← 代码/文档改动历史（追加式）
@@ -39,10 +41,20 @@ AI_COLLAB\
 │   │   ├── S2_06_HEADING_CONTROL.md   ← 航向闭环纠偏 ✅完成
 │   │   └── S2_06B_HEADING_TUNE.md     ← 定点转向精度微调（2°→≤1°）✅完成
 │   └── STAGE_03\
-│       └── S3_01_PROTOCOL.md          ← HC-12 协议与帧格式（纯软件定义）
+│       ├── S3_01_PROTOCOL.md          ← HC-12 协议与帧格式 ✅完成
+│       ├── S3_01B_HC12_CONFIG.md      ← HC-12 模块配置 ✅完成
+│       ├── S3_02_UART_COMM.md         ← USART1 收发 + 会话 + 强制停车 ✅完成
+│       ├── S3_03_PYTHON_TOOL.md       ← Python + pyserial 上位机 ✅完成
+│       ├── S3_03B_TIMEOUT_TUNE.md     ← 无线超时 200→400ms ✅完成
+│       ├── S3_04_05_RETESTS.md        ← 阶段 2 遗留五项补测 ✅完成
+│       ├── S3_DEMO_VISUAL_HMI.md      ← 参数化动作 API + 可视化上位机 v2 ✅完成
+│       ├── S3_DEMO_V3_ENHANCE.md      ← v3 增强：梯形减速/WASD/双击地图/剧本 ✅完成
+│   └── STAGE_04\
+│       └── S4_01_HW_CONFIRM.md        ← 云台硬件现场确认 + USART6 架构变更（人类主导）
 └── ACCEPTANCE\
     ├── STAGE_01.md                    ← 阶段 1 验收记录
-    └── STAGE_02.md                    ← 阶段 2 验收记录（收官）
+    ├── STAGE_02.md                    ← 阶段 2 验收记录（收官）
+    └── STAGE_03.md                    ← 阶段 3 验收记录（收官）
 ```
 
 **阶段 2 开始后**：派单放 `DISPATCHES\STAGE_02\`，验收记录放 `ACCEPTANCE\STAGE_02.md`，依此类推。
